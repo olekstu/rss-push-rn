@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, TextInput } from 'react-native';
-import { Notifications } from 'expo';
-import * as Permissions from 'expo-permissions';
+import React, { useState, useEffect } from "react";
+import {
+  FlatList,
+  StyleSheet,
+  View,
+  TextInput,
+  Button,
+  Text
+} from "react-native";
+import { Notifications } from "expo";
+import Constants from "expo-constants";
+import * as Permissions from "expo-permissions";
 
-async function registerForPushNotificationsAsync() {
+async function registerForPushNotificationsAsync(setToken) {
   const { status } = await Permissions.askAsync(Permissions.NOTIFICATIONS);
   // only asks if permissions have not already been determined, because
   // iOS won't necessarily prompt the user a second time.
@@ -11,51 +19,104 @@ async function registerForPushNotificationsAsync() {
   // `askAsync` will never prompt the user
 
   // Stop here if the user did not grant permissions
-  if (status !== 'granted') {
-    alert('No notification permissions!');
+  if (status !== "granted") {
+    alert("No notification permissions!");
     return;
   }
 
   // Get the token that identifies this device
-  let token = '';
   try {
-    token = await Notifications.getExpoPushTokenAsync();
+    let token = await Notifications.getExpoPushTokenAsync();
+    console.log(token);
+    setToken(token);
+  } catch (e) {
+    console.log("ERROR: " + e);
   }
-  catch(e) {
-    console.log("ERROR");
-    console.log(e);
-  }
+}
 
-  console.log(token)
-
-  // POST the token to your backend server from where you can retrieve it to send push notifications.
-  fetch('http://192.168.0.5:8080/subcsribeToTopic', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      regToken: token,
-      url: 'test',
-      username: 'Brent'
-    }),
-  })
-  .then(res => console.log("RES: " + res))
-  .catch(err => console.log("ERROR: "+ err))
+async function getUrlsForUser() {
+  const res = await fetch(
+    `http://192.168.0.7:8080/users/${Constants.installationId}`
+  );
+  const rssUrlsForUser = await res.json();
+  return rssUrlsForUser;
 }
 
 export default function App() {
+  const [token, onTokenChange] = useState();
+  const [rssUrl, onRssUrlChange] = useState("");
+  const [rssUrlsForUser, setRssUrlsForUser] = useState([]);
 
-  registerForPushNotificationsAsync();
+  useEffect(() => {
+    registerForPushNotificationsAsync(onTokenChange);
+    getUrlsForUser().then(rssUrlsForUser => setRssUrlsForUser(rssUrlsForUser));
+  }, []);
 
-  const [value, onChangeText] = useState('Init value')
+  const onSubmitPressed = () => {
+    fetch("http://192.168.0.7:8080/addUserToRssUrl", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        token: token,
+        rssUrl: rssUrl,
+        userId: Constants.installationId
+      })
+    })
+      .then(res =>
+        getUrlsForUser().then(rssUrlsForUser =>
+          setRssUrlsForUser(rssUrlsForUser)
+        )
+      )
+      .catch(err => console.log("ERROR: " + err));
+  };
+
+  const onRemoveRssUrlPressed = rssUrl => {
+    console.log();
+    fetch(
+      `http://192.168.0.7:8080/userss/${
+        Constants.installationId
+      }/rssUrl/${encodeURIComponent(rssUrl)}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    ).then(() =>
+      getUrlsForUser().then(rssUrlsForUser => setRssUrlsForUser(rssUrlsForUser))
+    );
+  };
+
   return (
     <View style={styles.container}>
-        <TextInput 
-          style={{ height: 40, borderColor: 'gray', borderWidth: 1 }}
-          onChangeText={text => onChangeText(text)}
-          value={value}
+      <View style={styles.submitWrapper}>
+        <TextInput
+          placeholder={"Enter RSS URL"}
+          style={styles.textInput}
+          onChangeText={v => onRssUrlChange(v)}
+          value={rssUrl}
         />
+        <Button
+          styles={styles.submitButton}
+          title="Submit "
+          onPress={() => onSubmitPressed()}
+        />
+      </View>
+      <Text style={{ color: "white" }}>Dine URLER:</Text>
+      <FlatList
+        style={styles.urlList}
+        data={rssUrlsForUser.map(rssUrl => ({
+          key: rssUrl
+        }))}
+        renderItem={({ item }) => (
+          <View style={styles.rssElementWrapper}>
+            <Text style={styles.rssUrlText}>{item.key} </Text>
+            <Button title="X" onPress={() => onRemoveRssUrlPressed(item.key)} />
+          </View>
+        )}
+      />
     </View>
   );
 }
@@ -63,8 +124,40 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "black",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 60
   },
+  textInput: {
+    height: 40,
+    borderColor: "grey",
+    borderWidth: 1,
+    backgroundColor: "white",
+    fontSize: 16,
+    marginRight: 20
+  },
+  submitWrapper: {
+    display: "flex",
+    flexDirection: "row",
+    borderColor: "grey",
+    borderWidth: 1,
+    paddingLeft: 50,
+    paddingRight: 50,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderRadius: 5,
+    marginBottom: 40
+  },
+  rssElementWrapper: {
+    display: "flex",
+    flexDirection: "row"
+  },
+  rssUrlText: {
+    marginTop: 10,
+    color: "white",
+    borderBottomColor: "white",
+    borderWidth: 2,
+    fontSize: 14
+  }
 });
