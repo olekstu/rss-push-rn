@@ -7,62 +7,110 @@ import {
   Button,
   Text
 } from "react-native";
-import { Notifications } from "expo";
+import { Notifications, registerRootComponent } from "expo";
 import Constants from "expo-constants";
 import * as Permissions from "expo-permissions";
+import { prod, local } from "./config";
 
-async function registerForPushNotificationsAsync(setToken) {
-  const { status } = await Permissions.askAsync(Permissions.NOTIFICATIONS);
-  // only asks if permissions have not already been determined, because
-  // iOS won't necessarily prompt the user a second time.
-  // On Android, permissions are granted on app installation, so
-  // `askAsync` will never prompt the user
+const envConfig = __DEV__ ? local : prod;
 
-  // Stop here if the user did not grant permissions
-  if (status !== "granted") {
-    alert("No notification permissions!");
+const fetchPlus = (url, config = {}) => {
+  return fetch(url, {
+    ...config,
+    headers: {
+      "x-api-key": Constants.manifest.extra.apiKey
+    }
+  });
+};
+
+async function registerForPushNotificationsAsync() {
+  const { status: existingStatus } = await Permissions.getAsync(
+    Permissions.NOTIFICATIONS
+  );
+  let finalStatus = existingStatus;
+  if (existingStatus !== "granted") {
+    const { status } = await Permissions.askAsync(Permissions.NOTIFICATIONS);
+    finalStatus = status;
+  }
+  if (finalStatus !== "granted") {
+    alert("Failed to get push token for push notification!");
     return;
   }
+  console.log("PERMISSION GRANTED");
 
   // Get the token that identifies this device
   try {
     let token = await Notifications.getExpoPushTokenAsync();
-    console.log(token);
-    setToken(token);
+    return token;
   } catch (e) {
-    console.log("ERROR: " + e);
+    console.log("ERROR WHEN FETCHING TOKEN: " + e);
   }
 }
 
-async function getUrlsForUser() {
-  const res = await fetch(
-    `http://192.168.0.7:8080/users/${Constants.installationId}`
-  );
-  const rssUrlsForUser = await res.json();
-  return rssUrlsForUser;
+export default class App extends React.Component {
+  render() {
+    return <AppTmp />;
+  }
 }
 
-export default function App() {
-  const [token, onTokenChange] = useState();
+const AppTmp = () => {
+  const [token, setToken] = useState();
   const [rssUrl, onRssUrlChange] = useState("");
   const [rssUrlsForUser, setRssUrlsForUser] = useState([]);
+  const [errorMessage, setErrorMessage] = useState("");
+  console.log("IS DEV " + __DEV__);
+
+  const getUrlsForUser = async () => {
+    console.log("GETTING URL FOR USER WITH ID: " + Constants.installationId);
+    const res = await fetchPlus(
+      `${envConfig.host}/users/${Constants.installationId}`
+    );
+    const rssUrlsForUser = await res.json();
+    console.log("GOT URL FOR USER");
+    console.log(rssUrlsForUser);
+    return rssUrlsForUser;
+  };
+
+  const loadInitialData = async () => {
+    const initDataLoad = await Promise.all([
+      registerForPushNotificationsAsync(),
+      getUrlsForUser()
+    ]);
+    console.log(initDataLoad);
+    const freshToken = initDataLoad[0];
+    const rssUrlsForUser = initDataLoad[1];
+    if (rssUrlsForUser.length > 0 && freshToken !== rssUrlsForUser[0].token) {
+      console.log("Received new token. Updating....");
+      //const await = updateTokenToBackendForUserId();      
+    }
+    setToken(freshToken);
+    setRssUrlsForUser(rssUrlsForUser);
+  };
 
   useEffect(() => {
-    registerForPushNotificationsAsync(onTokenChange);
-    getUrlsForUser().then(rssUrlsForUser => setRssUrlsForUser(rssUrlsForUser));
+    loadInitialData();
   }, []);
 
   const onSubmitPressed = () => {
-    fetch("http://192.168.0.7:8080/addUserToRssUrl", {
+    if (token === undefined) {
+      alert("Failed to get push token for push notification!");
+      return;
+    }
+
+    const body = {
+      token: token,
+      rssUrl: rssUrl,
+      userId: Constants.installationId
+    };
+    console.log("POSTING RSSURL");
+    console.log(body);
+    fetch(`${envConfig.host}/addUserToRssUrl`, {
       method: "POST",
       headers: {
+        "x-api-key": Constants.manifest.extra.apiKey,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        token: token,
-        rssUrl: rssUrl,
-        userId: Constants.installationId
-      })
+      body: JSON.stringify(body)
     })
       .then(res =>
         getUrlsForUser().then(rssUrlsForUser =>
@@ -73,9 +121,8 @@ export default function App() {
   };
 
   const onRemoveRssUrlPressed = rssUrl => {
-    console.log();
-    fetch(
-      `http://192.168.0.7:8080/userss/${
+    fetchPlus(
+      `${envConfig.host}/userss/${
         Constants.installationId
       }/rssUrl/${encodeURIComponent(rssUrl)}`,
       {
@@ -107,9 +154,11 @@ export default function App() {
       <Text style={{ color: "white" }}>Dine URLER:</Text>
       <FlatList
         style={styles.urlList}
-        data={rssUrlsForUser.map(rssUrl => ({
-          key: rssUrl
-        }))}
+        data={rssUrlsForUser
+          .map(user => user.rss_url)
+          .map(rssUrl => ({
+            key: rssUrl
+          }))}
         renderItem={({ item }) => (
           <View style={styles.rssElementWrapper}>
             <Text style={styles.rssUrlText}>{item.key} </Text>
@@ -119,7 +168,7 @@ export default function App() {
       />
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {

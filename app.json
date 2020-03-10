@@ -1,34 +1,32 @@
 {
   "expo": {
-    "name": "RssPushRN",
+    "name": "RssPush",
     "slug": "RssPushRN",
     "privacy": "public",
     "sdkVersion": "36.0.0",
-    "platforms": [
-      "ios",
-      "android",
-      "web"
-    ],
+    "platforms": ["ios", "android", "web"],
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon2.png",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash2.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
+      "bundleIdentifier": "oles.fun.rsspush",
       "supportsTablet": true
     },
     "android": {
       "package": "oles.fun.rsspush",
-      "googleServicesFile": "./google-services.json"   
+      "googleServicesFile": "./google-services.json"
+    },
+    "extra": {
+      "apiKey": "27dc631abdf20919dae9619ac572ec4139540337f5080e0ca2595595e8db6afa9a4c3d836ac113b730198bdc1ec4c5bd81e0197dfcb57a2d6bd77d03c28db8a99edd02a1920a51954a04aeab380de3b6412e62fac250c70859807eb6d037d496ec54d45676c1a2e3d2"
     }
   }
 }
